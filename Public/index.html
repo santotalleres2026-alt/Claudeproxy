@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Generador de Ideas de Negocio</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #0a0a0a; color: #eee; min-height: 100vh; padding: 2rem; }
+  h1 { font-size: 1.5rem; font-weight: 500; margin-bottom: 1.5rem; color: #fff; }
+  .input-row { display: flex; gap: 10px; margin-bottom: 2rem; }
+  input { flex: 1; padding: 10px 14px; border-radius: 8px; border: 1px solid #333; background: #1a1a1a; color: #eee; font-size: 15px; }
+  button { padding: 10px 20px; border-radius: 8px; border: 1px solid #444; background: #222; color: #eee; font-size: 15px; cursor: pointer; }
+  button:hover { background: #2a2a2a; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .stage { background: #111; border: 1px solid #222; border-radius: 12px; padding: 1.25rem; margin-bottom: 1rem; }
+  .badge { display: inline-block; font-size: 11px; padding: 3px 10px; border-radius: 6px; font-weight: 600; margin-bottom: 8px; }
+  .purple { background: #2d2060; color: #a89ff0; }
+  .teal { background: #0d3028; color: #4ecba0; }
+  .amber { background: #2d1f00; color: #f0a830; }
+  .stage-title { font-size: 13px; color: #666; margin-bottom: 10px; }
+  .stage-body { font-size: 15px; color: #ccc; line-height: 1.7; min-height: 48px; white-space: pre-wrap; }
+  .placeholder { color: #444; font-style: italic; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #444; border-top-color: #aaa; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error { color: #e05555; }
+</style>
+</head>
+<body>
+<h1>Generador de Ideas de Negocio</h1>
+
+<div class="input-row">
+  <input type="text" id="tema" placeholder="Ej: aplicación para mascotas, turismo local..." />
+  <button id="btn" onclick="iniciar()">Generar</button>
+</div>
+
+<div class="stage">
+  <div class="badge purple">IA 1 · Generadora</div>
+  <div class="stage-title">Produce 3 ideas de negocio</div>
+  <div class="stage-body" id="out1"><span class="placeholder">Las ideas aparecerán aquí...</span></div>
+</div>
+
+<div class="stage">
+  <div class="badge teal">IA 2 · Crítica</div>
+  <div class="stage-title">Evalúa y elige la más prometedora</div>
+  <div class="stage-body" id="out2"><span class="placeholder">La evaluación aparecerá aquí...</span></div>
+</div>
+
+<div class="stage">
+  <div class="badge amber">IA 3 · Refinadora</div>
+  <div class="stage-title">Desarrolla la idea ganadora en detalle</div>
+  <div class="stage-body" id="out3"><span class="placeholder">El plan desarrollado aparecerá aquí...</span></div>
+</div>
+
+<script>
+const PROXY = '/api/proxy';
+const btn = document.getElementById('btn');
+
+function setLoading(id, msg) {
+  document.getElementById(id).innerHTML = `<span class="spinner"></span>${msg}`;
+}
+function setContent(id, text) {
+  document.getElementById(id).innerText = text;
+}
+function setError(id, msg) {
+  document.getElementById(id).innerHTML = `<span class="error">${msg}</span>`;
+}
+
+async function callClaude(system, userMsg) {
+  const res = await fetch(PROXY, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1000,
+      system,
+      messages: [{ role: 'user', content: userMsg }]
+    })
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message);
+  return data.content.map(b => b.text || '').join('');
+}
+
+async function iniciar() {
+  const tema = document.getElementById('tema').value.trim();
+  if (!tema) { alert('Por favor ingresá un tema.'); return; }
+  btn.disabled = true;
+  setContent('out1', ''); setContent('out2', ''); setContent('out3', '');
+
+  try {
+    setLoading('out1', 'Generando ideas...');
+    const ideas = await callClaude(
+      'Sos un emprendedor creativo. Generá exactamente 3 ideas de negocio innovadoras para el tema dado. Numeradas, con nombre y descripción de 2-3 oraciones. Sin intro ni cierre.',
+      `Tema: ${tema}`
+    );
+    setContent('out1', ideas);
+
+    setLoading('out2', 'Evaluando ideas...');
+    const critica = await callClaude(
+      'Sos un inversor de capital de riesgo. Evaluá brevemente cada idea (1-2 oraciones) y elegí la más prometedora explicando por qué en 2-3 oraciones.',
+      `Ideas:\n${ideas}`
+    );
+    setContent('out2', critica);
+
+    setLoading('out3', 'Desarrollando la idea ganadora...');
+    const plan = await callClaude(
+      'Sos un consultor de negocios. Desarrollá la idea ganadora con: propuesta de valor, cliente objetivo, modelo de ingresos y 3 primeros pasos para validarla. Máximo 250 palabras.',
+      `Evaluación:\n${critica}\n\nIdeas originales:\n${ideas}`
+    );
+    setContent('out3', plan);
+
+  } catch(e) {
+    ['out1','out2','out3'].forEach(id => {
+      if (document.getElementById(id).querySelector('.spinner')) setError(id, 'Error: ' + e.message);
+    });
+  } finally {
+    btn.disabled = false;
+  }
+}
+</script>
+</body>
+</html>
